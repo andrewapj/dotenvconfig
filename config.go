@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/joho/godotenv"
@@ -16,6 +17,8 @@ type Config struct {
 	fs         fs.FS
 	currentEnv string
 }
+
+const configKey = "config"
 
 // GetKey gets a key from the current config.
 // It first checks to see if an environment variable is available, otherwise it returns a value from the map.
@@ -90,4 +93,31 @@ func (c Config) Load() (Config, error) {
 	}
 	slog.Info("loading config from: " + configFile)
 	return c, nil
+}
+
+// ToContext adds the Config to the given context.Context
+func ToContext(ctx context.Context, cfg Config) (context.Context, error) {
+	if ctx == nil {
+		return nil, errors.New("error, nil context")
+	}
+
+	return context.WithValue(ctx, configKey, cfg), nil
+}
+
+// FromContext gets a Config from the given context.Context
+func FromContext(ctx context.Context) (Config, error) {
+	if ctx == nil {
+		return Config{}, errors.New("error, nil context")
+	}
+
+	val := ctx.Value(configKey)
+	if val == nil {
+		return Config{}, fmt.Errorf("no value found")
+	}
+
+	config, ok := val.(Config)
+	if !ok {
+		return Config{}, fmt.Errorf("value in context is not of type Config")
+	}
+	return config, nil
 }

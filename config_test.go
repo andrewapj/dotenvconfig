@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"io/fs"
 	"os"
 	"reflect"
@@ -291,8 +292,70 @@ func TestConfig_GetKeyAsInt(t *testing.T) {
 	}
 }
 
+func TestToContext(t *testing.T) {
+	cfg, err := NewConfig(configDirFS()).Load()
+	if err != nil {
+		t.Errorf("error loading config: %v", err.Error())
+	}
+
+	ctx, err := ToContext(context.Background(), cfg)
+	if err != nil {
+		t.Errorf("error adding config to context")
+	}
+	cfgFromCtx := ctx.Value(configKey).(Config)
+
+	if !reflect.DeepEqual(cfgFromCtx, cfg) {
+		t.Errorf("Load() got = %v, want %v", cfgFromCtx, cfg)
+	}
+}
+
+func TestToContextWithNil(t *testing.T) {
+	_, err := ToContext(nil, Config{})
+	if err == nil {
+		t.Errorf("expected an error with a nil ctx")
+	}
+}
+
+func TestFromContext(t *testing.T) {
+
+	cfg, err := NewConfig(configDirFS()).Load()
+	if err != nil {
+		t.Errorf("error loading config: %v", err.Error())
+	}
+
+	ctx := context.WithValue(context.Background(), configKey, cfg)
+
+	cfgFromCtx, err := FromContext(ctx)
+	if err != nil {
+		t.Errorf("error loading context: %v", err.Error())
+	}
+
+	if !reflect.DeepEqual(cfgFromCtx, cfg) {
+		t.Errorf("Load() got = %v, want %v", cfgFromCtx, cfg)
+	}
+}
+
+func TestFromContextWithErr(t *testing.T) {
+
+	_, err := FromContext(nil)
+	if err == nil {
+		t.Errorf("expected an error with nil context")
+	}
+
+	_, err = FromContext(context.Background())
+	if err == nil {
+		t.Errorf("expected an error with missing key")
+	}
+
+	ctx := context.WithValue(context.Background(), configKey, "value")
+	_, err = FromContext(ctx)
+	if err == nil {
+		t.Errorf("expected an error correct key but incorrect type")
+	}
+}
+
 func configDirFS() fs.FS {
-	return os.DirFS("internal/testconfig")
+	return os.DirFS("testconfig/")
 }
 
 func makeEmptyMap() map[string]string {
