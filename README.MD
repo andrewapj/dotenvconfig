@@ -17,14 +17,14 @@ A file called `coverage.html` will be generated that shows the test coverage of 
 
 # Usage
 
-- Config file
+### Config file
 
 A config file should end with `.env` and be in the following format:
 ```
 TEST_KEY=123
 ```
 
-- Load config
+### Load config
 
 Load the config using a default environment. 
 This will look for a file called 'default.env'.
@@ -45,7 +45,7 @@ c, err := config.NewConfig(os.DirFS("internal/testconfig")).WithEnvironment("cus
 	}
 ```
 
-- Get Key
+### Get Key
 
 Get a key from the config
 ```
@@ -66,11 +66,27 @@ _ = os.Setenv("TEST_KEY", "NEW_VALUE")
 	fmt.Println(k) // NEW_VALUE
 ```
 
-- Get int Key
+### Get int Key
 
 Get an integer value from the config.
 ```
 k, err := c.GetKeyAsInt("TEST_KEY")
+	if err != nil {
+		panic(err.Error())
+	}
+```
+
+### Add a config to a context
+```
+ctx, err := config.ToContext(context.Background(), cfg)
+	if err != nil {
+		panic(err.Error())
+	}
+```
+
+### Get a config from a context
+```
+cfg, err := config.FromContext(ctx)
 	if err != nil {
 		panic(err.Error())
 	}
