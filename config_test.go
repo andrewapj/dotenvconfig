@@ -140,6 +140,27 @@ func TestConfig_Load(t *testing.T) {
 	}
 }
 
+func TestConfig_Load_WithEnvironmentVariableOverride(t *testing.T) {
+
+	_ = os.Setenv(configEnvKey, "envvar")
+	defer os.Unsetenv(configEnvKey)
+
+	got, err := NewConfig(configDirFS()).WithEnvironment("custom").Load()
+	if err != nil {
+		t.Errorf("unexpected error loading config: " + err.Error())
+	}
+
+	want := Config{
+		configMap:  makeEnvVarConfigMap(),
+		fs:         configDirFS(),
+		currentEnv: "envvar",
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Load() got = %v, want %v", got, want)
+	}
+}
+
 func TestConfig_GetKey(t *testing.T) {
 	type fields struct {
 		configMap  map[string]string
@@ -368,6 +389,10 @@ func makeDefaultConfigMap() map[string]string {
 
 func makeCustomConfigMap() map[string]string {
 	return map[string]string{testKey: "789"}
+}
+
+func makeEnvVarConfigMap() map[string]string {
+	return map[string]string{testKey: "000"}
 }
 
 func makeInvalidIntConfigMap() map[string]string {

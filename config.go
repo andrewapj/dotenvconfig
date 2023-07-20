@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"strconv"
+	"strings"
 )
 
 // Config contains the configuration data for an application
@@ -18,6 +19,7 @@ type Config struct {
 	currentEnv string
 }
 
+const configEnvKey = "APP_ENVIRONMENT"
 const configKey = "config"
 
 // GetKey gets a key from the current config.
@@ -71,6 +73,11 @@ func (c Config) Load() (Config, error) {
 
 	if c.fs == nil {
 		return c, errors.New("error loading config, fs was nil")
+	}
+
+	val, ok := os.LookupEnv(configEnvKey)
+	if ok {
+		c.currentEnv = strings.ToLower(val)
 	}
 
 	var configFile string

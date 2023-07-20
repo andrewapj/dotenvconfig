@@ -45,6 +45,16 @@ c, err := config.NewConfig(os.DirFS("internal/testconfig")).WithEnvironment("cus
 	}
 ```
 
+If an environment variable of `APP_ENVIRONMENT` is set then this will take precedent over the previous options.
+This will look for a file called 'envvar.env'
+```
+_ = os.Setenv(configEnvKey, "envvar")
+c, err := config.NewConfig(os.DirFS("internal/testconfig")).WithEnvironment("custom").Load()
+	if err != nil {
+		panic(err.Error())
+	}
+```
+
 ### Get Key
 
 Get a key from the config
