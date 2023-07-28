@@ -15,6 +15,10 @@ Library responsible for configuring a Go application. Makes use of [Godotenv](ht
 
 A file called `coverage.html` will be generated that shows the test coverage of the code.
 
+# Installation
+
+`go get github.com/andrewapj/dotenvconfig`
+
 # Usage
 
 ### Config file
