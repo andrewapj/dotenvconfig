@@ -22,35 +22,6 @@ type Config struct {
 const configEnvKey = "APP_ENVIRONMENT"
 const configKey = "config"
 
-// GetKey gets a key from the current config.
-// It first checks to see if an environment variable is available, otherwise it returns a value from the map.
-func (c Config) GetKey(key string) (string, error) {
-
-	if val := os.Getenv(key); val != "" {
-		return val, nil
-	}
-
-	if v, ok := c.configMap[key]; ok {
-		return v, nil
-	} else {
-		return "", errors.New("missing value in config: " + key)
-	}
-}
-
-// GetKeyAsInt gets a key from the config and converts it to an int.
-func (c Config) GetKeyAsInt(key string) (int, error) {
-	val, err := c.GetKey(key)
-	if err != nil {
-		return 0, err
-	}
-
-	i, err := strconv.Atoi(val)
-	if err != nil {
-		return 0, errors.New("error converting config value to int with key: " + key)
-	}
-	return i, nil
-}
-
 // NewConfig builds a new config. It sets the fs.FS and creates an empty config map.
 func NewConfig(fSys fs.FS) Config {
 
@@ -127,4 +98,53 @@ func FromContext(ctx context.Context) (Config, error) {
 		return Config{}, fmt.Errorf("value in context is not of type Config")
 	}
 	return config, nil
+}
+
+// GetKey gets a key from the current config.
+// It first checks to see if an environment variable is available, otherwise it returns a value from the map.
+func (c Config) GetKey(key string) (string, error) {
+
+	if val := os.Getenv(key); val != "" {
+		return val, nil
+	}
+
+	if v, ok := c.configMap[key]; ok {
+		return v, nil
+	} else {
+		return "", errors.New("missing value in config: " + key)
+	}
+}
+
+// GetKeyOrDefault gets a key from the current config similar to GetKey. If no value is present instead of returning
+// an error it returns a default.
+func (c Config) GetKeyOrDefault(key string, defaultVal string) string {
+	val, err := c.GetKey(key)
+	if err != nil {
+		return defaultVal
+	} else {
+		return val
+	}
+}
+
+// GetKeyAsInt gets a key from the config and converts it to an int.
+func (c Config) GetKeyAsInt(key string) (int, error) {
+	val, err := c.GetKey(key)
+	if err != nil {
+		return 0, err
+	}
+
+	i, err := strconv.Atoi(val)
+	if err != nil {
+		return 0, errors.New("error converting config value to int with key: " + key)
+	}
+	return i, nil
+}
+
+func (c Config) GetKeyAsIntOrDefault(key string, defaultVal int) int {
+	val, err := c.GetKeyAsInt(key)
+	if err != nil {
+		return defaultVal
+	} else {
+		return val
+	}
 }

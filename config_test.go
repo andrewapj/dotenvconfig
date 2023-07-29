@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"reflect"
+	"strconv"
 	"testing"
 )
 
@@ -244,6 +245,28 @@ func TestConfig_GetKey(t *testing.T) {
 	}
 }
 
+func TestConfig_GetKeyOrDefault_WithExisingKey(t *testing.T) {
+	cfg, _ := NewConfig(configDirFS()).Load()
+
+	want := testValue
+	got := cfg.GetKeyOrDefault(testKey, testValue)
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Load() got = %v, want %v", got, want)
+	}
+}
+
+func TestConfig_GetKeyOrDefault_WithMissingKey(t *testing.T) {
+	cfg, _ := NewConfig(configDirFS()).Load()
+
+	want := "default value"
+	got := cfg.GetKeyOrDefault("MISSING_KEY", "default value")
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Load() got = %v, want %v", got, want)
+	}
+}
+
 func TestConfig_GetKeyAsInt(t *testing.T) {
 	type fields struct {
 		configMap  map[string]string
@@ -310,6 +333,28 @@ func TestConfig_GetKeyAsInt(t *testing.T) {
 				t.Errorf("GetKeyAsInt() got = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestConfig_GetKeyAsIntOrDefault_WithExisingKey(t *testing.T) {
+	cfg, _ := NewConfig(configDirFS()).Load()
+
+	want, _ := strconv.Atoi(testValue)
+	got := cfg.GetKeyAsIntOrDefault(testKey, 123)
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Load() got = %v, want %v", got, want)
+	}
+}
+
+func TestConfig_GetKeyAsIntOrDefault_WithMissingKey(t *testing.T) {
+	cfg, _ := NewConfig(configDirFS()).Load()
+
+	want := 789
+	got := cfg.GetKeyAsIntOrDefault("MISSING_KEY", 789)
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Load() got = %v, want %v", got, want)
 	}
 }
 
