@@ -1,4 +1,4 @@
-.PHONY: all build fmt clean
+.PHONY: all clean fmt vet test 
 
 # Default target
 all: test
