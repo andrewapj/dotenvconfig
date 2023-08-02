@@ -49,7 +49,7 @@ c, err := config.NewConfig(os.DirFS("internal/testconfig")).WithEnvironment("cus
 	}
 ```
 
-If an environment variable of `APP_ENVIRONMENT` is set then this will take precedent over the previous options.
+If an environment variable of `APP_ENVIRONMENT` is set then this will take precedence over the previous options.
 This will look for a file called 'envvar.env'
 ```
 _ = os.Setenv(configEnvKey, "envvar")
