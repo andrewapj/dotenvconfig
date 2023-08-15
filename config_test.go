@@ -1,445 +1,314 @@
-package config
+package dotenvconfig
 
 import (
 	"context"
 	"io/fs"
 	"os"
 	"reflect"
-	"strconv"
 	"testing"
 )
 
-const testKey = "TEST_KEY"
-const testValue = "123"
-const badIntKey = "BAD_KEY"
-
 func TestNewConfig(t *testing.T) {
-	got := NewConfig(configDirFS())
-	want := Config{
-		configMap:  makeEmptyMap(),
-		fs:         configDirFS(),
-		currentEnv: "",
-	}
-
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("Load() got = %v, want %v", got, want)
-	}
-}
-
-func TestConfig_WithEnvironment(t *testing.T) {
-	got := NewConfig(configDirFS()).WithEnvironment("custom")
-	want := Config{
-		configMap:  makeEmptyMap(),
-		fs:         configDirFS(),
-		currentEnv: "custom",
-	}
-
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("Load() got = %v, want %v", got, want)
-	}
-}
-
-func TestConfig_Load(t *testing.T) {
-	type fields struct {
-		configMap  map[string]string
-		fs         fs.FS
-		currentEnv string
+	type args struct {
+		fSys fs.FS
+		opts Options
 	}
 	tests := []struct {
-		name    string
-		fields  fields
-		want    Config
-		wantErr bool
+		name     string
+		setup    func()
+		tearDown func()
+		args     args
+		want     Config
+		wantErr  bool
 	}{
 		{
-			name: "should get config with default environment",
-			fields: fields{
-				configMap:  makeEmptyMap(),
-				fs:         configDirFS(),
-				currentEnv: "",
+			name: "should get correct config with env variable",
+			setup: func() {
+				_ = os.Setenv("ENV_VAR", "envvar")
 			},
-			want: Config{
-				configMap:  makeDefaultConfigMap(),
-				fs:         configDirFS(),
-				currentEnv: "",
+			tearDown: func() {
+				_ = os.Unsetenv("ENV_VAR")
 			},
+			args: args{
+				fSys: getFS(),
+				opts: Options{
+					environment:    "ignored",
+					environmentKey: "ENV_VAR",
+				},
+			},
+			want:    Config{configMap: map[string]string{"TEST_KEY": "000"}},
 			wantErr: false,
 		},
 		{
-			name: "should get config with custom environment",
-			fields: fields{
-				configMap:  makeEmptyMap(),
-				fs:         configDirFS(),
-				currentEnv: "custom",
+			name:     "should get correct config with specific environment",
+			setup:    func() {},
+			tearDown: func() {},
+			args: args{
+				fSys: getFS(),
+				opts: Options{environment: "custom"},
 			},
-			want: Config{
-				configMap:  makeCustomConfigMap(),
-				fs:         configDirFS(),
-				currentEnv: "custom",
-			},
+			want:    Config{configMap: map[string]string{"TEST_KEY": "789"}},
 			wantErr: false,
 		},
 		{
-			name: "should get error with invalid fs in config",
-			fields: fields{
-				configMap:  makeEmptyMap(),
-				fs:         nil,
-				currentEnv: "",
+			name:     "should get correct config with default environment",
+			setup:    func() {},
+			tearDown: func() {},
+			args: args{
+				fSys: getFS(),
+				opts: Options{
+					jsonLogging:    true,
+					loggingEnabled: true,
+				},
 			},
-			want: Config{
-				configMap:  makeEmptyMap(),
-				fs:         nil,
-				currentEnv: "",
+			want: Config{configMap: map[string]string{
+				"TEST_KEY":  "123",
+				"TEST_KEY2": "456",
+			}},
+			wantErr: false,
+		},
+		{
+			name:     "should get error with nil fs",
+			setup:    func() {},
+			tearDown: func() {},
+			args: args{
+				fSys: nil,
+				opts: Options{},
 			},
+			want:    Config{},
 			wantErr: true,
 		},
 		{
-			name: "should get error with fs that doesn't contain a config file",
-			fields: fields{
-				configMap:  makeEmptyMap(),
-				fs:         os.DirFS(".."),
-				currentEnv: "",
+			name:     "should get error with invalid config",
+			setup:    func() {},
+			tearDown: func() {},
+			args: args{
+				fSys: getFS(),
+				opts: Options{environment: "invalid"},
 			},
-			want: Config{
-				configMap:  makeEmptyMap(),
-				fs:         os.DirFS(".."),
-				currentEnv: "",
-			},
+			want:    Config{},
 			wantErr: true,
 		},
 		{
-			name: "should get error with invalid config file",
-			fields: fields{
-				configMap:  makeEmptyMap(),
-				fs:         configDirFS(),
-				currentEnv: "invalid",
+			name:     "should get error with missing config",
+			setup:    func() {},
+			tearDown: func() {},
+			args: args{
+				fSys: getFS(),
+				opts: Options{environment: "missing"},
 			},
-			want: Config{
-				configMap:  makeEmptyMap(),
-				fs:         configDirFS(),
-				currentEnv: "invalid",
-			},
+			want:    Config{},
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := Config{
-				configMap:  tt.fields.configMap,
-				fs:         tt.fields.fs,
-				currentEnv: tt.fields.currentEnv,
-			}
-			got, err := c.Load()
+			tt.setup()
+			defer tt.tearDown()
+			got, err := NewConfig(tt.args.fSys, tt.args.opts)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Load() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("NewConfig() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Load() got = %v, want %v", got, tt.want)
+				t.Errorf("NewConfig() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestConfig_Load_WithEnvironmentVariableOverride(t *testing.T) {
-
-	_ = os.Setenv(configEnvKey, "envvar")
-	defer os.Unsetenv(configEnvKey)
-
-	got, err := NewConfig(configDirFS()).WithEnvironment("custom").Load()
-	if err != nil {
-		t.Errorf("unexpected error loading config: " + err.Error())
-	}
-
-	want := Config{
-		configMap:  makeEnvVarConfigMap(),
-		fs:         configDirFS(),
-		currentEnv: "envvar",
-	}
-
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("Load() got = %v, want %v", got, want)
-	}
-}
-
 func TestConfig_GetKey(t *testing.T) {
 	type fields struct {
-		configMap  map[string]string
-		fs         fs.FS
-		currentEnv string
+		configMap map[string]string
 	}
 	type args struct {
 		key string
 	}
 	tests := []struct {
 		name     string
+		setup    func()
+		tearDown func()
 		fields   fields
 		args     args
-		setup    func()
-		teardown func()
 		want     string
-		wantErr  bool
 	}{
 		{
-			name: "should get key from config",
-			fields: fields{
-				configMap:  makeDefaultConfigMap(),
-				fs:         configDirFS(),
-				currentEnv: "",
-			},
-			args:     args{key: testKey},
-			setup:    func() {},
-			teardown: func() {},
-			want:     testValue,
-			wantErr:  false,
-		},
-		{
-			name: "should get key from config, using os environment override",
-			fields: fields{
-				configMap:  makeDefaultConfigMap(),
-				fs:         configDirFS(),
-				currentEnv: "",
-			},
-			args: args{key: testKey},
+			name: "should get key with env var override",
 			setup: func() {
-				_ = os.Setenv(testKey, "NEW_VALUE")
+				_ = os.Setenv("TEST_KEY", "override")
 			},
-			teardown: func() {
-				_ = os.Unsetenv(testKey)
+			tearDown: func() {
+				_ = os.Unsetenv("TEST_KEY")
 			},
-			want:    "NEW_VALUE",
-			wantErr: false,
+			fields: fields{configMap: map[string]string{"TEST_KEY": "123"}},
+			args:   args{key: "TEST_KEY"},
+			want:   "override",
 		},
 		{
-			name: "should not find value for key",
-			fields: fields{
-				configMap:  makeDefaultConfigMap(),
-				fs:         configDirFS(),
-				currentEnv: "",
-			},
-			args:     args{key: "MISSING_KEY"},
+			name:     "should get key without env var override",
 			setup:    func() {},
-			teardown: func() {},
+			tearDown: func() {},
+			fields:   fields{configMap: map[string]string{"TEST_KEY": "123"}},
+			args:     args{key: "TEST_KEY"},
+			want:     "123",
+		},
+		{
+			name:     "should get zero value with missing key",
+			setup:    func() {},
+			tearDown: func() {},
+			fields:   fields{configMap: make(map[string]string)},
+			args:     args{key: "TEST_KEY"},
 			want:     "",
-			wantErr:  true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := Config{
-				configMap:  tt.fields.configMap,
-				fs:         tt.fields.fs,
-				currentEnv: tt.fields.currentEnv,
-			}
 			tt.setup()
-			defer tt.teardown()
-			got, err := c.GetKey(tt.args.key)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetKey() error = %v, wantErr %v", err, tt.wantErr)
-				return
+			defer tt.tearDown()
+			c := Config{
+				configMap: tt.fields.configMap,
 			}
-			if got != tt.want {
-				t.Errorf("GetKey() got = %v, want %v", got, tt.want)
+			if got := c.GetKey(tt.args.key); got != tt.want {
+				t.Errorf("GetKey() = %v, want %v", got, tt.want)
 			}
 		})
-	}
-}
-
-func TestConfig_GetKeyOrDefault_WithExisingKey(t *testing.T) {
-	cfg, _ := NewConfig(configDirFS()).Load()
-
-	want := testValue
-	got := cfg.GetKeyOrDefault(testKey, testValue)
-
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("Load() got = %v, want %v", got, want)
-	}
-}
-
-func TestConfig_GetKeyOrDefault_WithMissingKey(t *testing.T) {
-	cfg, _ := NewConfig(configDirFS()).Load()
-
-	want := "default value"
-	got := cfg.GetKeyOrDefault("MISSING_KEY", "default value")
-
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("Load() got = %v, want %v", got, want)
 	}
 }
 
 func TestConfig_GetKeyAsInt(t *testing.T) {
 	type fields struct {
-		configMap  map[string]string
-		fs         fs.FS
-		currentEnv string
+		configMap map[string]string
 	}
 	type args struct {
 		key string
 	}
 	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    int
-		wantErr bool
+		name   string
+		fields fields
+		args   args
+		want   int
 	}{
 		{
-			name: "should get int key from config",
-			fields: fields{
-				configMap:  makeDefaultConfigMap(),
-				fs:         configDirFS(),
-				currentEnv: "",
-			},
-			args:    args{key: testKey},
-			want:    123,
-			wantErr: false,
+			name:   "should get valid int value",
+			fields: fields{configMap: map[string]string{"TEST_KEY": "123"}},
+			args:   args{key: "TEST_KEY"},
+			want:   123,
 		},
 		{
-			name: "should not find int key",
-			fields: fields{
-				configMap:  makeDefaultConfigMap(),
-				fs:         configDirFS(),
-				currentEnv: "",
-			},
-			args:    args{key: "MISSING_KEY"},
-			want:    0,
-			wantErr: true,
-		},
-		{
-			name: "should get error with invalid int value for key",
-			fields: fields{
-				configMap:  makeInvalidIntConfigMap(),
-				fs:         configDirFS(),
-				currentEnv: "",
-			},
-			args:    args{key: badIntKey},
-			want:    0,
-			wantErr: true,
+			name:   "should get zero value with invalid int",
+			fields: fields{configMap: map[string]string{"TEST_KEY": "ABC"}},
+			args:   args{key: "TEST_KEY"},
+			want:   0,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := Config{
-				configMap:  tt.fields.configMap,
-				fs:         tt.fields.fs,
-				currentEnv: tt.fields.currentEnv,
+				configMap: tt.fields.configMap,
 			}
-			got, err := c.GetKeyAsInt(tt.args.key)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetKeyAsInt() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("GetKeyAsInt() got = %v, want %v", got, tt.want)
+			if got := c.GetKeyAsInt(tt.args.key); got != tt.want {
+				t.Errorf("GetKeyAsInt() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestConfig_GetKeyAsIntOrDefault_WithExisingKey(t *testing.T) {
-	cfg, _ := NewConfig(configDirFS()).Load()
-
-	want, _ := strconv.Atoi(testValue)
-	got := cfg.GetKeyAsIntOrDefault(testKey, 123)
-
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("Load() got = %v, want %v", got, want)
-	}
-}
-
-func TestConfig_GetKeyAsIntOrDefault_WithMissingKey(t *testing.T) {
-	cfg, _ := NewConfig(configDirFS()).Load()
-
-	want := 789
-	got := cfg.GetKeyAsIntOrDefault("MISSING_KEY", 789)
-
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("Load() got = %v, want %v", got, want)
-	}
-}
-
 func TestToContext(t *testing.T) {
-	cfg, err := NewConfig(configDirFS()).Load()
-	if err != nil {
-		t.Errorf("error loading config: %v", err.Error())
+	type args struct {
+		ctx context.Context
+		cfg Config
 	}
-
-	ctx, err := ToContext(context.Background(), cfg)
-	if err != nil {
-		t.Errorf("error adding config to context")
+	tests := []struct {
+		name    string
+		args    args
+		want    context.Context
+		wantErr bool
+	}{
+		{
+			name: "should create ctx with config",
+			args: args{
+				ctx: context.Background(),
+				cfg: Config{configMap: make(map[string]string)},
+			},
+			want: context.WithValue(context.Background(),
+				contextKey, Config{make(map[string]string)}),
+			wantErr: false,
+		},
+		{
+			name: "should get error with nil ctx",
+			args: args{
+				ctx: nil,
+				cfg: Config{},
+			},
+			want:    nil,
+			wantErr: true,
+		},
 	}
-	cfgFromCtx := ctx.Value(configKey).(Config)
-
-	if !reflect.DeepEqual(cfgFromCtx, cfg) {
-		t.Errorf("Load() got = %v, want %v", cfgFromCtx, cfg)
-	}
-}
-
-func TestToContextWithNil(t *testing.T) {
-	_, err := ToContext(nil, Config{})
-	if err == nil {
-		t.Errorf("expected an error with a nil ctx")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ToContext(tt.args.ctx, tt.args.cfg)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ToContext() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ToContext() got = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
 func TestFromContext(t *testing.T) {
-
-	cfg, err := NewConfig(configDirFS()).Load()
-	if err != nil {
-		t.Errorf("error loading config: %v", err.Error())
+	type args struct {
+		ctx context.Context
 	}
-
-	ctx := context.WithValue(context.Background(), configKey, cfg)
-
-	cfgFromCtx, err := FromContext(ctx)
-	if err != nil {
-		t.Errorf("error loading context: %v", err.Error())
+	tests := []struct {
+		name    string
+		args    args
+		want    Config
+		wantErr bool
+	}{
+		{
+			name: "should get config from ctx",
+			args: args{ctx: context.WithValue(context.Background(),
+				contextKey, Config{make(map[string]string)})},
+			want:    Config{make(map[string]string)},
+			wantErr: false,
+		},
+		{
+			name:    "should get error with nil ctx",
+			args:    args{ctx: nil},
+			want:    Config{},
+			wantErr: true,
+		},
+		{
+			name:    "should get error with ctx that has no config",
+			args:    args{ctx: context.Background()},
+			want:    Config{},
+			wantErr: true,
+		},
+		{
+			name: "should get error with ctx that has non config type",
+			args: args{ctx: context.WithValue(context.Background(),
+				contextKey, 1)},
+			want:    Config{},
+			wantErr: true,
+		},
 	}
-
-	if !reflect.DeepEqual(cfgFromCtx, cfg) {
-		t.Errorf("Load() got = %v, want %v", cfgFromCtx, cfg)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := FromContext(tt.args.ctx)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("FromContext() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("FromContext() got = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
-func TestFromContextWithErr(t *testing.T) {
-
-	_, err := FromContext(nil)
-	if err == nil {
-		t.Errorf("expected an error with nil context")
-	}
-
-	_, err = FromContext(context.Background())
-	if err == nil {
-		t.Errorf("expected an error with missing key")
-	}
-
-	ctx := context.WithValue(context.Background(), configKey, "value")
-	_, err = FromContext(ctx)
-	if err == nil {
-		t.Errorf("expected an error correct key but incorrect type")
-	}
-}
-
-func configDirFS() fs.FS {
+func getFS() fs.FS {
 	return os.DirFS("testconfig/")
-}
-
-func makeEmptyMap() map[string]string {
-	return map[string]string{}
-}
-
-func makeDefaultConfigMap() map[string]string {
-	return map[string]string{testKey: testValue}
-}
-
-func makeCustomConfigMap() map[string]string {
-	return map[string]string{testKey: "789"}
-}
-
-func makeEnvVarConfigMap() map[string]string {
-	return map[string]string{testKey: "000"}
-}
-
-func makeInvalidIntConfigMap() map[string]string {
-	return map[string]string{badIntKey: "ABC"}
 }

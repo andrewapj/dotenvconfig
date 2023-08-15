@@ -1,76 +1,101 @@
-package config
+package dotenvconfig
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/joho/godotenv"
-	"golang.org/x/exp/slog"
+	"github.com/andrewapj/dotenvconfig/internal/environment"
+	"github.com/andrewapj/dotenvconfig/internal/logging"
+	"github.com/andrewapj/dotenvconfig/internal/parser"
 	"io/fs"
 	"os"
 	"strconv"
-	"strings"
 )
 
-// Config contains the configuration data for an application
+// Config contains the configuration data for an application.
 type Config struct {
-	configMap  map[string]string
-	fs         fs.FS
-	currentEnv string
+	configMap map[string]string
 }
 
-const configEnvKey = "APP_ENVIRONMENT"
-const configKey = "config"
+// Options contains optional ways to configure an application.
+type Options struct {
+	// contextKey represents the key used to store/retrieve the config from a context.
+	contextKey string
 
-// NewConfig builds a new config. It sets the fs.FS and creates an empty config map.
-func NewConfig(fSys fs.FS) Config {
+	// environment represents the specific environment to use.
+	environment string
 
-	c := Config{
-		configMap: make(map[string]string),
-		fs:        fSys,
-	}
-	return c
+	// environmentKey is the key used to specify the environment to use. Takes precedence over other
+	//configuration options.
+	environmentKey string
+
+	// jsonLogging indicates whether logging should be done in JSON format.
+	jsonLogging bool
+
+	// loggingEnabled determines if logging is enabled for the application.
+	loggingEnabled bool
 }
 
-// WithEnvironment set the current environment for this config.
-func (c Config) WithEnvironment(currentEnv string) Config {
-	c.currentEnv = currentEnv
-	return c
-}
+var contextKey = "config"
+var ErrFsIsNil = errors.New("error, the FS was nil")
 
-// Load loads the config from a configuration file. If an environment has been specified then the config is loaded from a file called {environment}.env.
-// Otherwise the config is loaded from a file called 'default.env'
-func (c Config) Load() (Config, error) {
+// NewConfig builds a new config.
+func NewConfig(fSys fs.FS, opts Options) (Config, error) {
 
-	if c.fs == nil {
-		return c, errors.New("error loading config, fs was nil")
-	}
-
-	val, ok := os.LookupEnv(configEnvKey)
-	if ok {
-		c.currentEnv = strings.ToLower(val)
-	}
-
-	var configFile string
-	if c.currentEnv != "" {
-		slog.Info("found environment: " + c.currentEnv)
-		configFile = fmt.Sprintf("%s.env", c.currentEnv)
+	logging.SetupLogging(opts.loggingEnabled, opts.jsonLogging)
+	if opts.contextKey != "" {
+		logging.Info("setting context key to " + opts.contextKey)
+		contextKey = opts.contextKey
 	} else {
-		slog.Info("environment not set, setting environment to 'default'")
-		configFile = "default.env"
+		logging.Info("using default context key of " + contextKey)
 	}
 
-	b, err := fs.ReadFile(c.fs, configFile)
-	if err != nil {
-		return c, fmt.Errorf("error loading config: %w", err)
+	if fSys == nil {
+		logging.Error("error =, fs was nil")
+		return Config{}, ErrFsIsNil
 	}
 
-	c.configMap, err = godotenv.UnmarshalBytes(b)
+	env := environment.GetEnvironment(opts.environmentKey, opts.environment)
+
+	bytes, err := fs.ReadFile(fSys, env)
 	if err != nil {
-		return c, fmt.Errorf("error loading config: %w", err)
+		logging.Error("error reading config file " + env)
+		return Config{}, err
 	}
-	slog.Info("loading config from: " + configFile)
-	return c, nil
+
+	cfg, err := parser.Parse(bytes)
+	if err != nil {
+		logging.Error("error parsing config file " + env)
+		return Config{}, err
+	}
+
+	return Config{cfg}, nil
+}
+
+// GetKey gets a key from the current config.
+// It first checks to see if an environment variable is available, otherwise it returns a value from the map.
+func (c Config) GetKey(key string) string {
+
+	if val := os.Getenv(key); val != "" {
+		return val
+	}
+
+	if v, ok := c.configMap[key]; ok {
+		return v
+	} else {
+		return ""
+	}
+}
+
+// GetKeyAsInt gets a key from the config and converts it to an int.
+func (c Config) GetKeyAsInt(key string) int {
+	val := c.GetKey(key)
+
+	i, err := strconv.Atoi(val)
+	if err != nil {
+		return 0
+	}
+	return i
 }
 
 // ToContext adds the Config to the given context.Context
@@ -79,7 +104,7 @@ func ToContext(ctx context.Context, cfg Config) (context.Context, error) {
 		return nil, errors.New("error, nil context")
 	}
 
-	return context.WithValue(ctx, configKey, cfg), nil
+	return context.WithValue(ctx, contextKey, cfg), nil
 }
 
 // FromContext gets a Config from the given context.Context
@@ -88,7 +113,7 @@ func FromContext(ctx context.Context) (Config, error) {
 		return Config{}, errors.New("error, nil context")
 	}
 
-	val := ctx.Value(configKey)
+	val := ctx.Value(contextKey)
 	if val == nil {
 		return Config{}, fmt.Errorf("no value found")
 	}
@@ -98,53 +123,4 @@ func FromContext(ctx context.Context) (Config, error) {
 		return Config{}, fmt.Errorf("value in context is not of type Config")
 	}
 	return config, nil
-}
-
-// GetKey gets a key from the current config.
-// It first checks to see if an environment variable is available, otherwise it returns a value from the map.
-func (c Config) GetKey(key string) (string, error) {
-
-	if val := os.Getenv(key); val != "" {
-		return val, nil
-	}
-
-	if v, ok := c.configMap[key]; ok {
-		return v, nil
-	} else {
-		return "", errors.New("missing value in config: " + key)
-	}
-}
-
-// GetKeyOrDefault gets a key from the current config similar to GetKey. If no value is present instead of returning
-// an error it returns a default.
-func (c Config) GetKeyOrDefault(key string, defaultVal string) string {
-	val, err := c.GetKey(key)
-	if err != nil {
-		return defaultVal
-	} else {
-		return val
-	}
-}
-
-// GetKeyAsInt gets a key from the config and converts it to an int.
-func (c Config) GetKeyAsInt(key string) (int, error) {
-	val, err := c.GetKey(key)
-	if err != nil {
-		return 0, err
-	}
-
-	i, err := strconv.Atoi(val)
-	if err != nil {
-		return 0, errors.New("error converting config value to int with key: " + key)
-	}
-	return i, nil
-}
-
-func (c Config) GetKeyAsIntOrDefault(key string, defaultVal int) int {
-	val, err := c.GetKeyAsInt(key)
-	if err != nil {
-		return defaultVal
-	} else {
-		return val
-	}
 }
