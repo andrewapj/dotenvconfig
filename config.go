@@ -19,21 +19,21 @@ type Config struct {
 
 // Options contains optional ways to configure an application.
 type Options struct {
-	// contextKey represents the key used to store/retrieve the config from a context.
-	contextKey string
+	// ContextKey represents the key used to store/retrieve the config from a context.
+	ContextKey string
 
-	// environment represents the specific environment to use.
-	environment string
+	// Environment represents the specific Environment to use.
+	Environment string
 
-	// environmentKey is the key used to specify the environment to use. Takes precedence over other
+	// EnvironmentKey is the key used to specify the Environment to use. Takes precedence over other
 	//configuration options.
-	environmentKey string
+	EnvironmentKey string
 
-	// jsonLogging indicates whether logging should be done in JSON format.
-	jsonLogging bool
+	// JsonLogging indicates whether logging should be done in JSON format.
+	JsonLogging bool
 
-	// loggingEnabled determines if logging is enabled for the application.
-	loggingEnabled bool
+	// LoggingEnabled determines if logging is enabled for the application.
+	LoggingEnabled bool
 }
 
 var contextKey = "config"
@@ -42,10 +42,10 @@ var ErrFsIsNil = errors.New("error, the FS was nil")
 // NewConfig builds a new config.
 func NewConfig(fSys fs.FS, opts Options) (Config, error) {
 
-	logging.SetupLogging(opts.loggingEnabled, opts.jsonLogging)
-	if opts.contextKey != "" {
-		logging.Info("setting context key to " + opts.contextKey)
-		contextKey = opts.contextKey
+	logging.SetupLogging(opts.LoggingEnabled, opts.JsonLogging)
+	if opts.ContextKey != "" {
+		logging.Info("setting context key to " + opts.ContextKey)
+		contextKey = opts.ContextKey
 	} else {
 		logging.Info("using default context key of " + contextKey)
 	}
@@ -55,7 +55,7 @@ func NewConfig(fSys fs.FS, opts Options) (Config, error) {
 		return Config{}, ErrFsIsNil
 	}
 
-	env := environment.GetEnvironment(opts.environmentKey, opts.environment)
+	env := environment.GetEnvironment(opts.EnvironmentKey, opts.Environment)
 
 	bytes, err := fs.ReadFile(fSys, env)
 	if err != nil {

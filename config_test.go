@@ -32,33 +32,33 @@ func TestNewConfig(t *testing.T) {
 			args: args{
 				fSys: getFS(),
 				opts: Options{
-					environment:    "ignored",
-					environmentKey: "ENV_VAR",
+					Environment:    "ignored",
+					EnvironmentKey: "ENV_VAR",
 				},
 			},
 			want:    Config{configMap: map[string]string{"TEST_KEY": "000"}},
 			wantErr: false,
 		},
 		{
-			name:     "should get correct config with specific environment",
+			name:     "should get correct config with specific Environment",
 			setup:    func() {},
 			tearDown: func() {},
 			args: args{
 				fSys: getFS(),
-				opts: Options{environment: "custom"},
+				opts: Options{Environment: "custom"},
 			},
 			want:    Config{configMap: map[string]string{"TEST_KEY": "789"}},
 			wantErr: false,
 		},
 		{
-			name:     "should get correct config with default environment",
+			name:     "should get correct config with default Environment",
 			setup:    func() {},
 			tearDown: func() {},
 			args: args{
 				fSys: getFS(),
 				opts: Options{
-					jsonLogging:    true,
-					loggingEnabled: true,
+					JsonLogging:    true,
+					LoggingEnabled: true,
 				},
 			},
 			want: Config{configMap: map[string]string{
@@ -84,7 +84,7 @@ func TestNewConfig(t *testing.T) {
 			tearDown: func() {},
 			args: args{
 				fSys: getFS(),
-				opts: Options{environment: "invalid"},
+				opts: Options{Environment: "invalid"},
 			},
 			want:    Config{},
 			wantErr: true,
@@ -95,7 +95,7 @@ func TestNewConfig(t *testing.T) {
 			tearDown: func() {},
 			args: args{
 				fSys: getFS(),
-				opts: Options{environment: "missing"},
+				opts: Options{Environment: "missing"},
 			},
 			want:    Config{},
 			wantErr: true,
