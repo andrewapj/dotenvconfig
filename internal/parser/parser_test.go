@@ -22,10 +22,16 @@ func TestParse(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:    "should not parse valid config",
+			name:    "should not parse invalid config",
 			args:    args{data: getInvalidConfig()},
 			want:    nil,
 			wantErr: true,
+		},
+		{
+			name:    "should parse config with empty lines",
+			args:    args{data: getValidConfigWithEmptyLinesAndComments()},
+			want:    map[string]string{"TEST_KEY": "123", "TEST_KEY2": "456"},
+			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
@@ -44,6 +50,15 @@ func TestParse(t *testing.T) {
 
 func getValidConfig() []byte {
 	return []byte("TEST_KEY=123\nTEST_KEY2=456")
+}
+
+func getValidConfigWithEmptyLinesAndComments() []byte {
+	return []byte(`
+	TEST_KEY=123
+
+	# Comment
+
+	TEST_KEY2=456`)
 }
 
 func getInvalidConfig() []byte {

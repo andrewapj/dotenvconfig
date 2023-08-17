@@ -33,6 +33,10 @@ cfg, err := dotenvconfig.NewConfig(fs, Options{
 A config file should end with `.env` and be in the following format:
 ```
 TEST_KEY=123
+
+# This is a comment
+
+TEST_KEY2 = 456
 ```
 
 ### Get Key
