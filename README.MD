@@ -8,25 +8,26 @@ Library responsible for configuring Go applications.
 
 ## Usage
 
-### Environment Selection
+### Profile Selection
 
-The current environment can be selected in three ways, in order of precedence.
+The current profile can be selected in three ways, in order of precedence.
 
-- Lookup environment via an environment variable.
+- Lookup profile via an environment variable.
 ```
-cfg, err := dotenvconfig.NewConfig(fs, Options{
-		environmentKey: "ENV_VAR",
-	})
+err := dotenvconfig.Load(fs, Options{
+	ProfileKey: "ENV_VAR",
+})
 ```
-- Specify a specific environment
+- Specify a profile
 ```
-cfg, err := dotenvconfig.NewConfig(fs, Options{
-		environment: "development",
-	})
+err := dotenvconfig.Load(fs, Options{
+	Profile: "development",
+})
 ```
 
-- If no environment is specified then `default` is used.
-- The library will look for a file called `{environment}.env`
+- If no profile is specified then `default` is used.
+- The library will look for a file called `{profile}.env`
+- Environment variables are set from the values in the config. If they already exist then they will be preserved. 
 
 ### Config file
 
@@ -46,34 +47,9 @@ Get a key from the config
 val := cfg.GetKey("KEY")
 ```
 
-Get a key from the config but allow an os environment variable to override it.
-```
-_ = os.Setenv("TEST_KEY", "NEW_VALUE")
-k := cfg.GetKey("TEST_KEY")
-
-fmt.Println(k) // NEW_VALUE
-```
-
 ### Get int Key
 
 Get an integer value from the config.
 ```
-k := cfg.GetKeyAsInt("TEST_KEY")
+i := cfg.GetKeyAsInt("TEST_KEY")
 ```
-
-### Add a config to a context
-```
-ctx, err := dotenvconfig.ToContext(context.Background(), cfg)
-if err != nil {
-	panic(err.Error())
-}
-```
-
-### Get a config from a context
-```
-cfg, err := dotenvconfig.FromContext(ctx)
-if err != nil {
-	panic(err.Error())
-}
-```
-

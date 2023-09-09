@@ -1,312 +1,213 @@
 package dotenvconfig
 
 import (
-	"context"
 	"io/fs"
 	"os"
 	"reflect"
+	"strconv"
 	"testing"
 )
 
-func TestNewConfig(t *testing.T) {
+const testKey = "TEST_KEY"
+
+func TestLoad(t *testing.T) {
 	type args struct {
 		fSys fs.FS
 		opts Options
 	}
+
 	tests := []struct {
-		name     string
-		setup    func()
-		tearDown func()
-		args     args
-		want     Config
-		wantErr  bool
+		name          string
+		args          args
+		wantErr       bool
+		expectedKey   string
+		expectedValue string
+		setup         func()
+		tearDown      func()
 	}{
 		{
-			name: "should get correct config with env variable",
-			setup: func() {
-				_ = os.Setenv("ENV_VAR", "envvar")
-			},
-			tearDown: func() {
-				_ = os.Unsetenv("ENV_VAR")
-			},
-			args: args{
-				fSys: getFS(),
-				opts: Options{
-					Environment:    "ignored",
-					EnvironmentKey: "ENV_VAR",
-				},
-			},
-			want:    Config{configMap: map[string]string{"TEST_KEY": "000"}},
-			wantErr: false,
-		},
-		{
-			name:     "should get correct config with specific Environment",
-			setup:    func() {},
-			tearDown: func() {},
-			args: args{
-				fSys: getFS(),
-				opts: Options{Environment: "custom"},
-			},
-			want:    Config{configMap: map[string]string{"TEST_KEY": "789"}},
-			wantErr: false,
-		},
-		{
-			name:     "should get correct config with default Environment",
-			setup:    func() {},
-			tearDown: func() {},
-			args: args{
-				fSys: getFS(),
-				opts: Options{
-					JsonLogging:    true,
-					LoggingEnabled: true,
-				},
-			},
-			want: Config{configMap: map[string]string{
-				"TEST_KEY":  "123",
-				"TEST_KEY2": "456",
-			}},
-			wantErr: false,
-		},
-		{
-			name:     "should get error with nil fs",
-			setup:    func() {},
-			tearDown: func() {},
+			name: "should get error with nil fs",
 			args: args{
 				fSys: nil,
 				opts: Options{},
 			},
-			want:    Config{},
-			wantErr: true,
-		},
-		{
-			name:     "should get error with invalid config",
+			wantErr:  true,
 			setup:    func() {},
 			tearDown: func() {},
-			args: args{
-				fSys: getFS(),
-				opts: Options{Environment: "invalid"},
-			},
-			want:    Config{},
-			wantErr: true,
 		},
 		{
-			name:     "should get error with missing config",
-			setup:    func() {},
-			tearDown: func() {},
+			name: "should get config with profile set by environment variable",
 			args: args{
 				fSys: getFS(),
-				opts: Options{Environment: "missing"},
+				opts: Options{ProfileKey: "key"},
 			},
-			want:    Config{},
-			wantErr: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.setup()
-			defer tt.tearDown()
-			got, err := NewConfig(tt.args.fSys, tt.args.opts)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("NewConfig() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewConfig() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestConfig_GetKey(t *testing.T) {
-	type fields struct {
-		configMap map[string]string
-	}
-	type args struct {
-		key string
-	}
-	tests := []struct {
-		name     string
-		setup    func()
-		tearDown func()
-		fields   fields
-		args     args
-		want     string
-	}{
-		{
-			name: "should get key with env var override",
-			setup: func() {
-				_ = os.Setenv("TEST_KEY", "override")
-			},
+			wantErr:       false,
+			expectedKey:   testKey,
+			expectedValue: "000",
+			setup:         func() { _ = os.Setenv("key", "envvar") },
 			tearDown: func() {
-				_ = os.Unsetenv("TEST_KEY")
+				_ = os.Unsetenv("key")
+				_ = os.Unsetenv(testKey)
 			},
-			fields: fields{configMap: map[string]string{"TEST_KEY": "123"}},
-			args:   args{key: "TEST_KEY"},
-			want:   "override",
 		},
 		{
-			name:     "should get key without env var override",
-			setup:    func() {},
-			tearDown: func() {},
-			fields:   fields{configMap: map[string]string{"TEST_KEY": "123"}},
-			args:     args{key: "TEST_KEY"},
-			want:     "123",
+			name: "should get default profile, when environment variable is missing",
+			args: args{
+				fSys: getFS(),
+				opts: Options{ProfileKey: "missingKey"},
+			},
+			wantErr:       false,
+			expectedKey:   testKey,
+			expectedValue: "123",
+			setup:         func() {},
+			tearDown:      func() { _ = os.Unsetenv(testKey) },
 		},
 		{
-			name:     "should get zero value with missing key",
+			name: "should get config when profile set explicitly",
+			args: args{
+				fSys: getFS(),
+				opts: Options{Profile: "custom"},
+			},
+			wantErr:       false,
+			expectedKey:   testKey,
+			expectedValue: "789",
+			setup:         func() {},
+			tearDown:      func() { _ = os.Unsetenv(testKey) },
+		},
+		{
+			name: "should get config with default profile",
+			args: args{
+				fSys: getFS(),
+				opts: Options{},
+			},
+			wantErr:       false,
+			expectedKey:   "TEST_KEY2",
+			expectedValue: "456",
+			setup:         func() {},
+			tearDown: func() {
+				_ = os.Unsetenv(testKey)
+				_ = os.Unsetenv("TEST_KEY2")
+			},
+		},
+		{
+			name: "should get config from environment with Load not overriding",
+			args: args{
+				fSys: getFS(),
+				opts: Options{Profile: "custom"}},
+			wantErr:       false,
+			expectedKey:   testKey,
+			expectedValue: "preserved",
+			setup: func() {
+				_ = os.Setenv(testKey, "preserved")
+			},
+			tearDown: func() { _ = os.Unsetenv(testKey) },
+		},
+		{
+			name: "should get error with profile that points to a missing .env file",
+			args: args{
+				fSys: getFS(),
+				opts: Options{Profile: "missing"},
+			},
+			wantErr:  true,
 			setup:    func() {},
 			tearDown: func() {},
-			fields:   fields{configMap: make(map[string]string)},
-			args:     args{key: "TEST_KEY"},
-			want:     "",
+		},
+		{
+			name: "should get error with invalid config",
+			args: args{
+				fSys: getFS(),
+				opts: Options{Profile: "invalid"},
+			},
+			wantErr:  true,
+			setup:    func() {},
+			tearDown: func() {},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.setup()
 			defer tt.tearDown()
-			c := Config{
-				configMap: tt.fields.configMap,
+			if err := Load(tt.args.fSys, tt.args.opts); (err != nil) != tt.wantErr {
+				t.Errorf("Load() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if got := c.GetKey(tt.args.key); got != tt.want {
-				t.Errorf("GetKey() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestConfig_GetKeyAsInt(t *testing.T) {
-	type fields struct {
-		configMap map[string]string
-	}
-	type args struct {
-		key string
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   int
-	}{
-		{
-			name:   "should get valid int value",
-			fields: fields{configMap: map[string]string{"TEST_KEY": "123"}},
-			args:   args{key: "TEST_KEY"},
-			want:   123,
-		},
-		{
-			name:   "should get zero value with invalid int",
-			fields: fields{configMap: map[string]string{"TEST_KEY": "ABC"}},
-			args:   args{key: "TEST_KEY"},
-			want:   0,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := Config{
-				configMap: tt.fields.configMap,
-			}
-			if got := c.GetKeyAsInt(tt.args.key); got != tt.want {
-				t.Errorf("GetKeyAsInt() = %v, want %v", got, tt.want)
+			v := os.Getenv(tt.expectedKey)
+			if !reflect.DeepEqual(tt.expectedValue, v) {
+				t.Errorf("Load() got = %v, want %v", v, tt.expectedValue)
 			}
 		})
 	}
 }
 
-func TestToContext(t *testing.T) {
-	type args struct {
-		ctx context.Context
-		cfg Config
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    context.Context
-		wantErr bool
-	}{
-		{
-			name: "should create ctx with config",
-			args: args{
-				ctx: context.Background(),
-				cfg: Config{configMap: make(map[string]string)},
-			},
-			want: context.WithValue(context.Background(),
-				contextKey, Config{make(map[string]string)}),
-			wantErr: false,
-		},
-		{
-			name: "should get error with nil ctx",
-			args: args{
-				ctx: nil,
-				cfg: Config{},
-			},
-			want:    nil,
-			wantErr: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := ToContext(tt.args.ctx, tt.args.cfg)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ToContext() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ToContext() got = %v, want %v", got, tt.want)
-			}
-		})
+func TestGetKey_ExistingKey(t *testing.T) {
+	value := "TEST_VALUE"
+	_ = os.Setenv(testKey, value)
+	defer os.Unsetenv(testKey)
+
+	if result := GetKey(testKey); result != value {
+		t.Errorf("Expected %s, got %s", value, result)
 	}
 }
 
-func TestFromContext(t *testing.T) {
-	type args struct {
-		ctx context.Context
+func TestGetKey_NonExistentKey_NoPanic(t *testing.T) {
+	panicOnError = false
+	nonExistentKey := "NON_EXISTENT_KEY"
+
+	if result := GetKey(nonExistentKey); result != "" {
+		t.Errorf("Expected empty string, got %s", result)
 	}
-	tests := []struct {
-		name    string
-		args    args
-		want    Config
-		wantErr bool
-	}{
-		{
-			name: "should get config from ctx",
-			args: args{ctx: context.WithValue(context.Background(),
-				contextKey, Config{make(map[string]string)})},
-			want:    Config{make(map[string]string)},
-			wantErr: false,
-		},
-		{
-			name:    "should get error with nil ctx",
-			args:    args{ctx: nil},
-			want:    Config{},
-			wantErr: true,
-		},
-		{
-			name:    "should get error with ctx that has no config",
-			args:    args{ctx: context.Background()},
-			want:    Config{},
-			wantErr: true,
-		},
-		{
-			name: "should get error with ctx that has non config type",
-			args: args{ctx: context.WithValue(context.Background(),
-				contextKey, 1)},
-			want:    Config{},
-			wantErr: true,
-		},
+}
+
+func TestGetKey_NonExistentKey_WithPanic(t *testing.T) {
+	panicOnError = true
+
+	nonExistentKey := "NON_EXISTENT_KEY"
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("Expected a panic for non-existent key with panicOnError set to true")
+		}
+	}()
+
+	GetKey(nonExistentKey)
+}
+
+func TestGetKeyAsInt_ValidInt(t *testing.T) {
+	key := testKey
+	value := "12345"
+	expectedIntValue, _ := strconv.Atoi(value)
+	_ = os.Setenv(key, value)
+	defer os.Unsetenv(key)
+
+	if result := GetKeyAsInt(key); result != expectedIntValue {
+		t.Errorf("Expected %d, got %d", expectedIntValue, result)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := FromContext(tt.args.ctx)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("FromContext() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("FromContext() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
+}
+
+func TestGetKeyAsInt_InvalidInt(t *testing.T) {
+	key := testKey
+	value := "NotAnInt"
+	_ = os.Setenv(key, value)
+	defer os.Unsetenv(key)
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("Expected a panic for invalid integer value")
+		}
+	}()
+
+	GetKeyAsInt(key)
+}
+
+func TestGetKeyAsInt_NonExistentKey(t *testing.T) {
+	panicOnError = true
+
+	nonExistentKey := "NON_EXISTENT_INT_KEY"
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("Expected a panic for non-existent key")
+		}
+	}()
+
+	GetKeyAsInt(nonExistentKey)
 }
 
 func getFS() fs.FS {
