@@ -5,6 +5,8 @@ import (
 	"errors"
 )
 
+// Parse reads a .env file and returns a map[string]string containing those values. Each line of the .env
+// file should be in the format, KEY=VALUE
 func Parse(data []byte) (map[string]string, error) {
 	lines := bytes.Split(data, []byte("\n"))
 	result := make(map[string]string)
