@@ -138,6 +138,8 @@ func TestLoad(t *testing.T) {
 	}
 }
 
+// GetKey
+
 func TestGetKey_ExistingKey(t *testing.T) {
 	value := "TEST_VALUE"
 	_ = os.Setenv(testKey, value)
@@ -149,7 +151,6 @@ func TestGetKey_ExistingKey(t *testing.T) {
 }
 
 func TestGetKey_NonExistentKey_NoPanic(t *testing.T) {
-	panicOnError = false
 	nonExistentKey := "NON_EXISTENT_KEY"
 
 	if result := GetKey(nonExistentKey); result != "" {
@@ -157,18 +158,31 @@ func TestGetKey_NonExistentKey_NoPanic(t *testing.T) {
 	}
 }
 
-func TestGetKey_NonExistentKey_WithPanic(t *testing.T) {
-	panicOnError = true
+// GetKeyMust
 
+func TestGetKeyMust(t *testing.T) {
+	value := "TEST_VALUE"
+	_ = os.Setenv(testKey, value)
+	defer os.Unsetenv(testKey)
+
+	if result := GetKeyMust(testKey); result != value {
+		t.Errorf("Expected %s, got %s", value, result)
+	}
+}
+
+func TestGetKeyMust_WithPanic(t *testing.T) {
 	nonExistentKey := "NON_EXISTENT_KEY"
+
 	defer func() {
 		if r := recover(); r == nil {
 			t.Error("Expected a panic for non-existent key with panicOnError set to true")
 		}
 	}()
 
-	GetKey(nonExistentKey)
+	GetKeyMust(nonExistentKey)
 }
+
+// GetKeyAsInt
 
 func TestGetKeyAsInt_ValidInt(t *testing.T) {
 	key := testKey
@@ -184,30 +198,63 @@ func TestGetKeyAsInt_ValidInt(t *testing.T) {
 
 func TestGetKeyAsInt_InvalidInt(t *testing.T) {
 	key := testKey
-	value := "NotAnInt"
+	value := "abc"
+	expectedIntValue := 0
+	_ = os.Setenv(key, value)
+	defer os.Unsetenv(key)
+
+	if result := GetKeyAsInt(key); result != expectedIntValue {
+		t.Errorf("Expected %d, got %d", expectedIntValue, result)
+	}
+}
+
+func TestGetKeyAsInt_NonExistentKey(t *testing.T) {
+	nonExistentKey := "NON_EXISTENT_INT_KEY"
+
+	if result := GetKeyAsInt(nonExistentKey); result != 0 {
+		t.Errorf("Expected %d, got %d", 0, result)
+	}
+}
+
+// GetKeyAsIntMust
+
+func TestGetKeyAsIntMust(t *testing.T) {
+	key := testKey
+	value := "12345"
+	expectedIntValue, _ := strconv.Atoi(value)
+	_ = os.Setenv(key, value)
+	defer os.Unsetenv(key)
+
+	if result := GetKeyAsIntMust(key); result != expectedIntValue {
+		t.Errorf("Expected %d, got %d", expectedIntValue, result)
+	}
+}
+
+func TestGetKeyAsIntMust_InvalidInt(t *testing.T) {
+	key := testKey
+	value := "abc"
 	_ = os.Setenv(key, value)
 	defer os.Unsetenv(key)
 
 	defer func() {
 		if r := recover(); r == nil {
-			t.Error("Expected a panic for invalid integer value")
+			t.Error("Expected a panic for non-existent key with panicOnError set to true")
 		}
 	}()
 
-	GetKeyAsInt(key)
+	GetKeyAsIntMust(key)
 }
 
-func TestGetKeyAsInt_NonExistentKey(t *testing.T) {
-	panicOnError = true
-
+func TestGetKeyAsIntMust_MissingInt(t *testing.T) {
 	nonExistentKey := "NON_EXISTENT_INT_KEY"
+
 	defer func() {
 		if r := recover(); r == nil {
-			t.Error("Expected a panic for non-existent key")
+			t.Error("Expected a panic for non-existent key with panicOnError set to true")
 		}
 	}()
 
-	GetKeyAsInt(nonExistentKey)
+	GetKeyAsIntMust(nonExistentKey)
 }
 
 func getFS() fs.FS {

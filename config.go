@@ -24,14 +24,10 @@ type Options struct {
 
 	// LoggingEnabled determines if logging is enabled for the application.
 	LoggingEnabled bool
-
-	// PanicOnError determines if the Get Key functions will panic if a key is missing.
-	PanicOnError bool
 }
 
 var ErrFsIsNil = errors.New("error, the FS was nil")
 var ErrMissingKey = errors.New("error, could not find key")
-var panicOnError bool
 
 // Load reads the config from an env file and adds it to the environment.
 // If an environment variable already exists then it is not overwritten.
@@ -45,7 +41,6 @@ func Load(fSys fs.FS, opts Options) error {
 	}
 
 	p := profile.GetProfile(opts.ProfileKey, opts.Profile)
-	panicOnError = opts.PanicOnError
 
 	bytes, err := fs.ReadFile(fSys, p)
 	if err != nil {
@@ -72,17 +67,36 @@ func Load(fSys fs.FS, opts Options) error {
 	return nil
 }
 
+// GetKey retrieves a value from the config by key.
 func GetKey(key string) string {
+	return os.Getenv(key)
+}
+
+// GetKeyMust retrieves a value from the config by key. It panics if the key does not exist.
+func GetKeyMust(key string) string {
 
 	v, ok := os.LookupEnv(key)
-	if !ok && panicOnError {
+	if !ok {
 		panic(ErrMissingKey.Error())
 	}
-
 	return v
 }
 
+// GetKeyAsInt retrieves a value from the config by key and converts the value to an int. If the key could not be found
+// or the value can not be converted to an int, a zero is returned.
 func GetKeyAsInt(key string) int {
+	val := GetKey(key)
+
+	i, err := strconv.Atoi(val)
+	if err != nil {
+		return 0
+	}
+	return i
+}
+
+// GetKeyAsIntMust retrieves a value from the config by key and converts the value to an int. If the key could not be found
+// or the value can not be converted to an int, the function will panic.
+func GetKeyAsIntMust(key string) int {
 	val := GetKey(key)
 
 	i, err := strconv.Atoi(val)
