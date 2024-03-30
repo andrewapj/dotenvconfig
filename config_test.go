@@ -1,260 +1,197 @@
 package dotenvconfig
 
 import (
+	"errors"
 	"io/fs"
 	"os"
-	"reflect"
-	"strconv"
 	"testing"
 )
 
-const testKey = "TEST_KEY"
+const (
+	testKey         = "TEST_KEY"
+	testKeyValue    = "123"
+	testKeyValueInt = 123
+)
 
-func TestLoad(t *testing.T) {
-	type args struct {
-		fSys fs.FS
-		opts Options
+// Load
+
+func TestLoad_FailsWithNilFs(t *testing.T) {
+
+	if err := Load(nil, "", Options{}); err == nil {
+		t.Errorf("Load() error = %v, wantErr %v", err, true)
+	}
+}
+
+func TestLoad_FailsWithMissingConfig(t *testing.T) {
+
+	if err := Load(getFS(), "missing.env", Options{}); err == nil {
+		t.Errorf("Load() error = %v, wantErr %v", err, true)
+	}
+}
+
+func TestLoad_FailsWithInvalidConfig(t *testing.T) {
+
+	if err := Load(getFS(), "invalid.env", Options{}); err == nil {
+		t.Errorf("Load() error = %v, wantErr %v", err, true)
+	}
+}
+
+func TestLoad_SetsNewKey(t *testing.T) {
+
+	if err := Load(getFS(), "default.env", Options{}); err != nil {
+		t.Errorf("Load() error = %v, wantErr %v", err, true)
 	}
 
-	tests := []struct {
-		name          string
-		args          args
-		wantErr       bool
-		expectedKey   string
-		expectedValue string
-		setup         func()
-		tearDown      func()
-	}{
-		{
-			name: "should get error with nil fs",
-			args: args{
-				fSys: nil,
-				opts: Options{},
-			},
-			wantErr:  true,
-			setup:    func() {},
-			tearDown: func() {},
-		},
-		{
-			name: "should get config with profile set by environment variable",
-			args: args{
-				fSys: getFS(),
-				opts: Options{ProfileKey: "key"},
-			},
-			wantErr:       false,
-			expectedKey:   testKey,
-			expectedValue: "000",
-			setup:         func() { _ = os.Setenv("key", "envvar") },
-			tearDown: func() {
-				_ = os.Unsetenv("key")
-				_ = os.Unsetenv(testKey)
-			},
-		},
-		{
-			name: "should get default profile, when environment variable is missing",
-			args: args{
-				fSys: getFS(),
-				opts: Options{ProfileKey: "missingKey"},
-			},
-			wantErr:       false,
-			expectedKey:   testKey,
-			expectedValue: "123",
-			setup:         func() {},
-			tearDown:      func() { _ = os.Unsetenv(testKey) },
-		},
-		{
-			name: "should get config when profile set explicitly",
-			args: args{
-				fSys: getFS(),
-				opts: Options{Profile: "custom"},
-			},
-			wantErr:       false,
-			expectedKey:   testKey,
-			expectedValue: "789",
-			setup:         func() {},
-			tearDown:      func() { _ = os.Unsetenv(testKey) },
-		},
-		{
-			name: "should get config with default profile",
-			args: args{
-				fSys: getFS(),
-				opts: Options{},
-			},
-			wantErr:       false,
-			expectedKey:   "TEST_KEY2",
-			expectedValue: "456",
-			setup:         func() {},
-			tearDown: func() {
-				_ = os.Unsetenv(testKey)
-				_ = os.Unsetenv("TEST_KEY2")
-			},
-		},
-		{
-			name: "should get config from environment with Load not overriding",
-			args: args{
-				fSys: getFS(),
-				opts: Options{Profile: "custom"}},
-			wantErr:       false,
-			expectedKey:   testKey,
-			expectedValue: "preserved",
-			setup: func() {
-				_ = os.Setenv(testKey, "preserved")
-			},
-			tearDown: func() { _ = os.Unsetenv(testKey) },
-		},
-		{
-			name: "should get error with profile that points to a missing .env file",
-			args: args{
-				fSys: getFS(),
-				opts: Options{Profile: "missing"},
-			},
-			wantErr:  true,
-			setup:    func() {},
-			tearDown: func() {},
-		},
-		{
-			name: "should get error with invalid config",
-			args: args{
-				fSys: getFS(),
-				opts: Options{Profile: "invalid"},
-			},
-			wantErr:  true,
-			setup:    func() {},
-			tearDown: func() {},
-		},
+	if v := os.Getenv(testKey); v != testKeyValue {
+		t.Errorf("Load() invalid value for key %s, expected %s, got %s", testKey, testKeyValue, v)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.setup()
-			defer tt.tearDown()
-			if err := Load(tt.args.fSys, tt.args.opts); (err != nil) != tt.wantErr {
-				t.Errorf("Load() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			v := os.Getenv(tt.expectedKey)
-			if !reflect.DeepEqual(tt.expectedValue, v) {
-				t.Errorf("Load() got = %v, want %v", v, tt.expectedValue)
-			}
-		})
+}
+
+func TestLoad_KeepsExistingKey(t *testing.T) {
+
+	tmpVal := "789"
+	_ = os.Setenv(testKey, tmpVal)
+	defer func() {
+		err := os.Unsetenv(testKey)
+		if err != nil {
+			panic(err)
+		}
+	}()
+
+	if err := Load(getFS(), "default.env", Options{}); err != nil {
+		t.Errorf("Load() error = %v, wantErr %v", err, true)
+	}
+
+	if v := os.Getenv(testKey); v != tmpVal {
+		t.Errorf("Load() invalid value for key %s, expected %s, got %s", testKey, tmpVal, v)
 	}
 }
 
 // GetKey
 
-func TestGetKey_ExistingKey(t *testing.T) {
-	value := "TEST_VALUE"
-	_ = os.Setenv(testKey, value)
-	defer os.Unsetenv(testKey)
+func TestGetKey(t *testing.T) {
+	_ = os.Setenv(testKey, testKeyValue)
+	defer func() {
+		err := os.Unsetenv(testKey)
+		if err != nil {
+			panic(err)
+		}
+	}()
 
-	if result := GetKey(testKey); result != value {
-		t.Errorf("Expected %s, got %s", value, result)
+	v, err := GetKey(testKey)
+	if err != nil {
+		t.Errorf("unexpected error: %s", err)
+	}
+
+	if v != testKeyValue {
+		t.Errorf("GetKey(): want %s, got %s", testKeyValue, v)
 	}
 }
 
-func TestGetKey_NonExistentKey_NoPanic(t *testing.T) {
-	nonExistentKey := "NON_EXISTENT_KEY"
+func TestGetKey_Err(t *testing.T) {
 
-	if result := GetKey(nonExistentKey); result != "" {
-		t.Errorf("Expected empty string, got %s", result)
+	_, err := GetKey(testKey)
+	if !errors.Is(err, ErrMissingKey) {
+		t.Errorf("GetKey(): want %s, got %s", ErrMissingKey, err)
 	}
 }
 
 // GetKeyMust
 
 func TestGetKeyMust(t *testing.T) {
-	value := "TEST_VALUE"
-	_ = os.Setenv(testKey, value)
-	defer os.Unsetenv(testKey)
-
-	if result := GetKeyMust(testKey); result != value {
-		t.Errorf("Expected %s, got %s", value, result)
-	}
-}
-
-func TestGetKeyMust_WithPanic(t *testing.T) {
-	nonExistentKey := "NON_EXISTENT_KEY"
-
+	_ = os.Setenv(testKey, testKeyValue)
 	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Expected a panic for non-existent key with panicOnError set to true")
+		err := os.Unsetenv(testKey)
+		if err != nil {
+			panic(err)
 		}
 	}()
 
-	GetKeyMust(nonExistentKey)
+	if v := GetKeyMust(testKey); v != testKeyValue {
+		t.Errorf("GetKeyMust(): want %s, got %s", testKeyValue, v)
+	}
+}
+
+func TestGetKeyMust_Panic(t *testing.T) {
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("Expected a panic for non-existent key")
+		}
+	}()
+
+	GetKeyMust(testKey)
 }
 
 // GetKeyAsInt
 
-func TestGetKeyAsInt_ValidInt(t *testing.T) {
-	key := testKey
-	value := "12345"
-	expectedIntValue, _ := strconv.Atoi(value)
-	_ = os.Setenv(key, value)
-	defer os.Unsetenv(key)
+func TestGetKeyAsInt(t *testing.T) {
+	_ = os.Setenv(testKey, testKeyValue)
+	defer func() {
+		err := os.Unsetenv(testKey)
+		if err != nil {
+			panic(err)
+		}
+	}()
 
-	if result := GetKeyAsInt(key); result != expectedIntValue {
-		t.Errorf("Expected %d, got %d", expectedIntValue, result)
+	v, err := GetKeyAsInt(testKey)
+	if err != nil {
+		t.Errorf("unexpected error: %s", err)
+	}
+
+	if v != testKeyValueInt {
+		t.Errorf("GetKey(): want %d, got %d", testKeyValueInt, v)
 	}
 }
 
-func TestGetKeyAsInt_InvalidInt(t *testing.T) {
-	key := testKey
-	value := "abc"
-	expectedIntValue := 0
-	_ = os.Setenv(key, value)
-	defer os.Unsetenv(key)
+func TestGetKeyAsInt_Missing(t *testing.T) {
 
-	if result := GetKeyAsInt(key); result != expectedIntValue {
-		t.Errorf("Expected %d, got %d", expectedIntValue, result)
+	_, err := GetKeyAsInt(testKey)
+	if !errors.Is(err, ErrMissingKey) {
+		t.Errorf("GetKeyAsInt(): want %s, got %s", ErrMissingKey, err)
 	}
 }
 
-func TestGetKeyAsInt_NonExistentKey(t *testing.T) {
-	nonExistentKey := "NON_EXISTENT_INT_KEY"
+func TestGetKeyAsInt_ConversionErr(t *testing.T) {
+	_ = os.Setenv(testKey, "ABC")
+	defer func() {
+		err := os.Unsetenv(testKey)
+		if err != nil {
+			panic(err)
+		}
+	}()
 
-	if result := GetKeyAsInt(nonExistentKey); result != 0 {
-		t.Errorf("Expected %d, got %d", 0, result)
+	_, err := GetKeyAsInt(testKey)
+	if !errors.Is(err, ErrConversion) {
+		t.Errorf("GetKeyAsInt(): want %s, got %s", ErrConversion, err)
 	}
 }
 
 // GetKeyAsIntMust
 
 func TestGetKeyAsIntMust(t *testing.T) {
-	key := testKey
-	value := "12345"
-	expectedIntValue, _ := strconv.Atoi(value)
-	_ = os.Setenv(key, value)
-	defer os.Unsetenv(key)
+	_ = os.Setenv(testKey, testKeyValue)
+	defer func() {
+		err := os.Unsetenv(testKey)
+		if err != nil {
+			panic(err)
+		}
+	}()
 
-	if result := GetKeyAsIntMust(key); result != expectedIntValue {
-		t.Errorf("Expected %d, got %d", expectedIntValue, result)
+	if v := GetKeyAsIntMust(testKey); v != testKeyValueInt {
+		t.Errorf("GetKeyMust(): want %d, got %d", testKeyValueInt, v)
 	}
 }
 
-func TestGetKeyAsIntMust_InvalidInt(t *testing.T) {
-	key := testKey
-	value := "abc"
-	_ = os.Setenv(key, value)
-	defer os.Unsetenv(key)
+func TestGetKeyAsIntMust_Panic(t *testing.T) {
 
 	defer func() {
 		if r := recover(); r == nil {
-			t.Error("Expected a panic for non-existent key with panicOnError set to true")
+			t.Error("Expected a panic for non-existent key")
 		}
 	}()
 
-	GetKeyAsIntMust(key)
-}
-
-func TestGetKeyAsIntMust_MissingInt(t *testing.T) {
-	nonExistentKey := "NON_EXISTENT_INT_KEY"
-
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Expected a panic for non-existent key with panicOnError set to true")
-		}
-	}()
-
-	GetKeyAsIntMust(nonExistentKey)
+	GetKeyAsIntMust(testKey)
 }
 
 func getFS() fs.FS {

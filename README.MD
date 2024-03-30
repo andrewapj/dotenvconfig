@@ -8,28 +8,10 @@ Library responsible for configuring Go applications.
 
 ## Usage
 
-### Profile Selection
-
-A profile is used to determine which .env config file should be loaded.
-The current profile can be selected in three ways, in order of precedence:
-
-- Lookup profile via an environment variable.
+### Loading a config file
 ```
-err := dotenvconfig.Load(fs, Options{
-	ProfileKey: "ENV_VAR",
-})
+err := Load(getFS(), "config.env", Options{})
 ```
-- Specify a profile
-```
-err := dotenvconfig.Load(fs, Options{
-	Profile: "development",
-})
-```
-
-- If no profile is specified then `default` is used.
-- The library will look for a file called `{profile}.env`
-- Environment variables are set from the values in the config. 
-If an existing environment variable already exist then it will be preserved. 
 
 ### Config file
 
@@ -46,7 +28,7 @@ TEST_KEY2 = 456
 
 Get a key from the config
 ```
-val := cfg.GetKey("KEY")
+val, err := cfg.GetKey("KEY")
 ```
 
 ### Get Key Must
@@ -60,7 +42,7 @@ val := cfg.GetKeyMust("KEY")
 
 Get an integer value from the config.
 ```
-i := cfg.GetKeyAsInt("TEST_KEY")
+i, err := cfg.GetKeyAsInt("TEST_KEY")
 ```
 
 ### Get Int Key Must

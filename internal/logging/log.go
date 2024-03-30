@@ -22,13 +22,6 @@ func SetupLogging(enabled, isJson bool) {
 	loggingEnabled = enabled
 }
 
-// Info is a wrapper method for logging
-func Info(msg string) {
-	if loggingEnabled {
-		logger.Info(msg)
-	}
-}
-
 // Error is a wrapper method for logging
 func Error(msg string) {
 	if loggingEnabled {
